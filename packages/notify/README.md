@@ -7,7 +7,8 @@ Notification extension for Pi coding agent.
 - Notifies on `agent_settled`.
 - Notifies on `permissions:ask`.
 - Backend: `auto`, `macos`, `terminal`, or `off`.
-- Optional last-input summary in completion notifications.
+- Optional last-input summary in completion notification titles.
+- Optional macOS notification sound.
 - Optional script hook.
 
 ## Config
@@ -25,7 +26,10 @@ Project: `<project>/.pi/notify.json`
     "permissionAsk": true,
     "permissionMessage": "Permission required: {tool}",
     "backend": "auto",
-    "skipWhenFrontmost": false
+    "skipWhenFrontmost": false,
+    "sound": "Glass"
   }
 }
 ```
+
+Set `sound` to a macOS sound name such as `Glass`, `Ping`, or `Submarine`. Set it to `false` to disable sound.

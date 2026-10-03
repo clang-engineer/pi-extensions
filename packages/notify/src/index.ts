@@ -16,6 +16,7 @@ type NotifyConfig = {
   maxInputLength: number;
   skipWhenFrontmost: boolean;
   frontmostProcess: string;
+  sound: string | false;
   script?: string;
 };
 
@@ -40,6 +41,7 @@ const DEFAULT_CONFIG: NotifyConfig = {
   maxInputLength: 80,
   skipWhenFrontmost: false,
   frontmostProcess: "ghostty",
+  sound: "Glass",
 };
 
 function execFileAsync(file: string, args: string[], input?: string, timeout = 5000): Promise<string> {
@@ -89,17 +91,18 @@ function notifyTerminal(title: string, message: string): void {
   process.stdout.write(`\x1b]777;notify;${title};${message}\x07`);
 }
 
-async function notifyMacos(title: string, message: string): Promise<void> {
+async function notifyMacos(title: string, message: string, sound: string | false): Promise<void> {
+  const soundClause = sound ? ` sound name "${escapeAppleScript(sound)}"` : "";
   await execFileAsync("/usr/bin/osascript", [
     "-e",
-    `display notification "${escapeAppleScript(message)}" with title "${escapeAppleScript(title)}"`,
+    `display notification "${escapeAppleScript(message)}" with title "${escapeAppleScript(title)}"${soundClause}`,
   ]);
 }
 
 async function sendNotification(config: NotifyConfig, payload: NotifyPayload): Promise<void> {
   if (config.backend === "off") return;
   if (config.backend === "macos" || (config.backend === "auto" && process.platform === "darwin")) {
-    await notifyMacos(payload.title, payload.message);
+    await notifyMacos(payload.title, payload.message, config.sound);
     return;
   }
   notifyTerminal(payload.title, payload.message);
@@ -150,11 +153,11 @@ export default function (pi: any) {
 
   async function handle(event: NotifyEvent, message: string) {
     config = loadConfig(cwd);
-    const detail = event === "agent_settled" && config.includeInput && lastInput ? `: ${lastInput}` : "";
+    const inputTitle = event === "agent_settled" && config.includeInput && lastInput ? ` 완료: ${lastInput}` : "";
     const payload: NotifyPayload = {
       event,
-      title: config.title,
-      message: `${message}${detail}`,
+      title: `${config.title}${inputTitle}`,
+      message,
       timestamp: Date.now(),
       cwd,
       pid: process.pid,
