@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 type NotifyEvent = "agent_settled" | "permission_ask";
-type Backend = "auto" | "macos" | "terminal" | "off";
+type Backend = "auto" | "macos" | "linux" | "windows" | "terminal" | "off";
 
 type NotifyConfig = {
   backend: Backend;
@@ -14,6 +14,8 @@ type NotifyConfig = {
   permissionAsk: boolean;
   includeInput: boolean;
   maxInputLength: number;
+  minDurationSeconds: number;
+  tmuxBell: boolean;
   skipWhenFrontmost: boolean;
   frontmostProcess: string;
   sound: string | false;
@@ -39,6 +41,8 @@ const DEFAULT_CONFIG: NotifyConfig = {
   permissionAsk: true,
   includeInput: true,
   maxInputLength: 80,
+  minDurationSeconds: 0,
+  tmuxBell: true,
   skipWhenFrontmost: false,
   frontmostProcess: "ghostty",
   sound: "Glass",
@@ -82,6 +86,10 @@ async function shouldSkip(config: NotifyConfig): Promise<boolean> {
   return (await frontmostProcessName()) === config.frontmostProcess.toLowerCase();
 }
 
+function alertTmuxWindow(): void {
+  if (process.env.TMUX) process.stdout.write("\x07");
+}
+
 function notifyTerminal(title: string, message: string): void {
   if (process.env.KITTY_WINDOW_ID) {
     process.stdout.write(`\x1b]99;i=1:d=0;${title}\x1b\\`);
@@ -99,10 +107,39 @@ async function notifyMacos(title: string, message: string, sound: string | false
   ]);
 }
 
+async function notifyLinux(title: string, message: string): Promise<void> {
+  await execFileAsync("notify-send", [title, message]);
+}
+
+function windowsToastScript(title: string, message: string): string {
+  const escapedTitle = title.replaceAll("'", "''");
+  const escapedMessage = message.replaceAll("'", "''");
+  const type = "Windows.UI.Notifications";
+  return [
+    `[${type}.ToastNotificationManager, ${type}, ContentType = WindowsRuntime] > $null`,
+    `$xml = [${type}.ToastNotificationManager]::GetTemplateContent([${type}.ToastTemplateType]::ToastText02)`,
+    `$xml.GetElementsByTagName('text')[0].AppendChild($xml.CreateTextNode('${escapedTitle}')) > $null`,
+    `$xml.GetElementsByTagName('text')[1].AppendChild($xml.CreateTextNode('${escapedMessage}')) > $null`,
+    `[${type}.ToastNotificationManager]::CreateToastNotifier('Pi').Show([${type}.ToastNotification]::new($xml))`,
+  ].join("; ");
+}
+
+async function notifyWindows(title: string, message: string): Promise<void> {
+  await execFileAsync("powershell.exe", ["-NoProfile", "-Command", windowsToastScript(title, message)]);
+}
+
 async function sendNotification(config: NotifyConfig, payload: NotifyPayload): Promise<void> {
   if (config.backend === "off") return;
   if (config.backend === "macos" || (config.backend === "auto" && process.platform === "darwin")) {
     await notifyMacos(payload.title, payload.message, config.sound);
+    return;
+  }
+  if (config.backend === "linux" || (config.backend === "auto" && process.platform === "linux")) {
+    await notifyLinux(payload.title, payload.message);
+    return;
+  }
+  if (config.backend === "windows" || (config.backend === "auto" && process.platform === "win32")) {
+    await notifyWindows(payload.title, payload.message);
     return;
   }
   notifyTerminal(payload.title, payload.message);
@@ -128,7 +165,7 @@ function loadConfig(cwd: string): NotifyConfig {
   return {
     ...DEFAULT_CONFIG,
     ...merged,
-    backend: ["auto", "macos", "terminal", "off"].includes(String(merged.backend))
+    backend: ["auto", "macos", "linux", "windows", "terminal", "off"].includes(String(merged.backend))
       ? (merged.backend as Backend)
       : DEFAULT_CONFIG.backend,
   };
@@ -150,6 +187,7 @@ export default function (pi: any) {
   let cwd = process.cwd();
   let config = loadConfig(cwd);
   let lastInput = "";
+  let agentStartedAt = 0;
 
   async function handle(event: NotifyEvent, message: string) {
     config = loadConfig(cwd);
@@ -165,6 +203,7 @@ export default function (pi: any) {
 
     if (!(await shouldSkip(config))) {
       await sendNotification(config, payload);
+      if (config.tmuxBell) alertTmuxWindow();
     }
 
     try {
@@ -188,7 +227,14 @@ export default function (pi: any) {
     return { action: "continue" };
   });
 
+  pi.on("agent_start", () => {
+    agentStartedAt = Date.now();
+  });
+
   pi.on("agent_settled", async () => {
+    config = loadConfig(cwd);
+    const elapsedSeconds = agentStartedAt ? (Date.now() - agentStartedAt) / 1000 : Number.POSITIVE_INFINITY;
+    if (elapsedSeconds < config.minDurationSeconds) return;
     await handle("agent_settled", config.settledMessage);
   });
 
