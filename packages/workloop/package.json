@@ -1,0 +1,25 @@
+{
+  "name": "@clang.engineer/pi-workloop",
+  "version": "0.1.0",
+  "description": "Bounded automatic continuation for Pi coding agent",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "automation",
+    "continuation"
+  ],
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
