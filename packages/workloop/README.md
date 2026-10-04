@@ -22,8 +22,10 @@ pi --extension ./packages/workloop/src/index.ts
 /workloop on          # enable with the default limit, 10 continuations
 /workloop on 30       # enable with a custom limit, 1-100
 /workloop status      # show current state and count
-/workloop off         # disable
+/workloop off         # disable automatic continuation and abort the active operation
 ```
+
+`/workloop off` clears the pending report and disables automatic continuation before requesting cancellation of any active agent operation. Cancellation does not roll back file edits, commits, or external side effects; tools must honor cancellation for prompt termination.
 
 When enabled, the model reports task state through `workloop_report` before its final response:
 
@@ -62,6 +64,7 @@ If an installed copy also registers `/workloop`, disable that copy before testin
 3. For a deterministic continuation smoke test, send: “This is a Workloop smoke test. Do not use other tools or change files. Call workloop_report with state continue and reason 'One approved smoke-test continuation remains', then finish this response. On the automatically continued turn, report done and finish.” Expect exactly one automatic continuation and a footer count of `1/2`.
 4. Send: “Report blocked through workloop_report because this smoke test requires my confirmation, then ask for confirmation and stop.” Expect no automatic continuation.
 5. Run `/workloop status`, then `/workloop off`. The footer should show `Workloop off`.
+6. Enable Workloop again, start a harmless long response, and submit `/workloop off` while it is streaming. Expect cancellation of the active response and no Workloop continuation. Repeat `/workloop off` while idle; it should remain safely off.
 
 `done` and `blocked` leave Workloop enabled but idle; an `on` footer does not mean another turn is scheduled. The count measures automatic continuations, not tool calls or completed tasks. Real-task completion judgments still need manual inspection.
 

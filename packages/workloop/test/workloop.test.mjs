@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import extension from '../src/index.ts';
 
-function setup() {
+function setup({ idle = true, onAbort = () => {} } = {}) {
   const handlers = {};
   let command, tool;
   extension({
@@ -10,14 +10,39 @@ function setup() {
     registerCommand: (_name, definition) => { command = definition; },
     registerTool: (definition) => { tool = definition; },
   });
-  const ctx = { ui: { theme: { fg: (_color, text) => text }, setStatus() {}, notify() {} } };
+  const ctx = { isIdle: () => idle, abort: onAbort, ui: { theme: { fg: (_color, text) => text }, setStatus() {}, notify() {} } };
   return {
     handlers,
+    off: () => command.handler('off', ctx),
     on: (limit = 2) => command.handler(`on ${limit}`, ctx),
     report: (state) => tool.execute('id', { state, reason: 'Approved verification step' }),
     settle: (outcome = 'completed', canContinue = true) => handlers.agent_before_settle({ entries: [], outcome, context: { canContinue } }, ctx),
   };
 }
+
+test('off disables continuation before aborting an active operation', async () => {
+  let aborts = 0;
+  const loop = setup({ idle: false, onAbort: () => {
+    aborts++;
+    assert.equal(loop.settle(), undefined);
+  } });
+  await loop.on();
+  await loop.report('continue');
+  await loop.off();
+  assert.equal(aborts, 1);
+  await loop.report('continue');
+  assert.equal(loop.settle(), undefined);
+  await loop.on();
+  assert.equal(loop.settle(), undefined);
+});
+
+test('off is safe and repeatable while idle', async () => {
+  const loop = setup({ onAbort: () => assert.fail('Idle operations must not be aborted') });
+  await loop.on();
+  await loop.off();
+  await loop.off();
+  assert.equal(loop.settle(), undefined);
+});
 
 test('missing, done, and blocked reports never continue', async () => {
   const loop = setup();

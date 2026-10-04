@@ -88,7 +88,8 @@ export default function (pi: ExtensionAPI) {
         enabled = false;
         reportedState = undefined;
         updateStatus(ctx);
-        ctx.ui.notify("Workloop disabled", "info");
+        if (!ctx.isIdle()) ctx.abort();
+        ctx.ui.notify("Workloop disabled; any active operation was requested to stop", "info");
         return;
       }
 
