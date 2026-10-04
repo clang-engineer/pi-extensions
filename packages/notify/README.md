@@ -13,6 +13,14 @@ Notification extension for Pi coding agent.
 - Optional tmux bell/window alert.
 - Optional script hook.
 
+## Install
+
+```sh
+pi install npm:@clang.engineer/pi-notify
+```
+
+This package is discoverable by Pi package catalogs through the npm `pi-package` keyword. Pi loads the extension declared in `package.json` under `pi.extensions`.
+
 ## Config
 
 Global: `~/.pi/agent/notify.json`  
