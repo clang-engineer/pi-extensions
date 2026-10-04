@@ -16,6 +16,51 @@ Or load the extension file directly during development:
 pi --extension ./packages/workloop/src/index.ts
 ```
 
+## Release and update
+
+Run from the `pi-extensions` repository root:
+
+```bash
+# 1. Validate the source.
+npm run check
+node --experimental-strip-types --test packages/workloop/test/workloop.test.mjs
+
+# 2. Bump once per release (updates package.json and package-lock.json).
+npm version patch --workspace @clang.engineer/pi-workloop --no-git-tag-version
+npm pack --dry-run --workspace @clang.engineer/pi-workloop
+
+# 3. The maintainer publishes from their terminal and completes npm authentication.
+npm publish --workspace @clang.engineer/pi-workloop --access public
+
+# 4. Confirm the published version before updating Pi.
+npm view @clang.engineer/pi-workloop version --prefer-online
+pi update npm:@clang.engineer/pi-workloop
+```
+
+If the installed copy remains old, reinstall:
+
+```bash
+pi install npm:@clang.engineer/pi-workloop
+```
+
+Use `pi list` to locate the installed package and check its `package.json` version.
+For the default agent directory:
+
+```bash
+node -p 'JSON.parse(require("fs").readFileSync(process.env.HOME + "/.pi/agent/npm/node_modules/@clang.engineer/pi-workloop/package.json", "utf8")).version'
+```
+
+Then run `/reload` in Pi or restart Pi, and enable `/workloop on` again.
+
+- Local source edits are not published automatically. Restarting Pi or seeing
+  `Updated` does not prove that a newer version was installed; compare versions.
+- An `EOTP` error means npm authentication is required. Complete the publish
+  flow in the maintainer's terminal; authentication alone is not proof of release.
+- If npm reports an already staged version, resolve the existing publish approval
+  flow rather than repeatedly publishing or bumping versions to bypass it.
+- Review and commit the release version changes separately; the version command
+  above does not create a Git commit or tag.
+
 ## Usage
 
 ```text
@@ -25,17 +70,17 @@ pi --extension ./packages/workloop/src/index.ts
 /workloop off         # disable automatic continuation and abort the active operation
 ```
 
-`/workloop off` clears the pending report and disables automatic continuation before requesting cancellation of any active agent operation. Cancellation does not roll back file edits, commits, or external side effects; tools must honor cancellation for prompt termination.
+`/workloop off` disables automatic continuation before requesting cancellation of any active agent operation. Cancellation does not roll back file edits, commits, or external side effects; tools must honor cancellation for prompt termination.
 
-When enabled, the model reports task state through `workloop_report` before its final response:
+When enabled, every successfully completed run requests another turn at
+`agent_before_settle`, up to the continuation limit. No `workloop_report` tool or
+model completion classification is required. Errors and aborts disable the loop.
 
-- `continue`: unfinished implementation or verification within the user's approved scope has a safe next step.
-- `done`: the request is satisfied, including greetings and casual conversation.
-- `blocked`: clarification, permission, or a risky decision is needed.
-
-Only a fresh `continue` report permits one automatic continuation at `agent_before_settle`. Missing reports, errors, and aborts do not continue. Reports are consumed once and cleared when new user messages arrive. Workloop remains enabled after `done` or `blocked`, ready for the next request; the counter resets only on `/workloop on`.
-
-No language-specific keywords or message-length rules are used. New improvement ideas outside the approved scope are not remaining work. State classification is still a model judgment, not a guarantee of task completeness or safety.
+**Completion and clarification do not automatically stop the loop.** It may repeat
+completion messages or questions until the limit is reached. Use `/workloop off`
+when the goal is complete or user input is required. Start with a small limit.
+Instructions constrain work to the approved overall goal, but are not a mechanical
+safety gate; Workloop never grants new permissions or commit/deployment authority.
 
 ## Local testing
 
@@ -47,7 +92,9 @@ npm run check
 node --experimental-strip-types --test packages/workloop/test/workloop.test.mjs
 ```
 
-The automated tests mock Pi's event handlers and cover missing/done/blocked reports, one-time report consumption, continuation limits, errors/aborts, new user messages, and instance isolation. They do not verify actual model judgments or terminal rendering.
+The automated tests mock Pi's event handlers and cover report-free continuation,
+initially non-runnable context, entry preservation, limits, errors/aborts, stopping,
+session reset, and instance isolation. They do not verify actual terminal rendering.
 
 ### Interactive smoke test
 
@@ -60,13 +107,14 @@ pi --extension ./packages/workloop/src/index.ts
 If an installed copy also registers `/workloop`, disable that copy before testing to avoid duplicate registrations. After editing the source, run `/reload` in this source-loaded session, then enable Workloop again.
 
 1. Run `/workloop on 2`. The footer should show `↻ Workloop 0/2`.
-2. Send `hi` (or a greeting in another language). Expect one response and no automatic continuation. The model should report `done`; a missing report also stops continuation.
-3. For a deterministic continuation smoke test, send: “This is a Workloop smoke test. Do not use other tools or change files. Call workloop_report with state continue and reason 'One approved smoke-test continuation remains', then finish this response. On the automatically continued turn, report done and finish.” Expect exactly one automatic continuation and a footer count of `1/2`.
-4. Send: “Report blocked through workloop_report because this smoke test requires my confirmation, then ask for confirmation and stop.” Expect no automatic continuation.
+2. Send: “This is a Workloop smoke test. Do not use tools or change files. Reply with one short sentence on each turn.”
+3. Expect the initial response plus two automatic continuations, without any report tool calls.
+4. Expect the continuation-limit message and an off footer after the second continuation.
 5. Run `/workloop status`, then `/workloop off`. The footer should show `Workloop off`.
 6. Enable Workloop again, start a harmless long response, and submit `/workloop off` while it is streaming. Expect cancellation of the active response and no Workloop continuation. Repeat `/workloop off` while idle; it should remain safely off.
 
-`done` and `blocked` leave Workloop enabled but idle; an `on` footer does not mean another turn is scheduled. The count measures automatic continuations, not tool calls or completed tasks. Real-task completion judgments still need manual inspection.
+The count measures automatic continuations, not tool calls or completed tasks.
+A completed task or a question can still trigger another turn; stop manually when needed.
 
 ## Safety model
 
