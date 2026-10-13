@@ -76,11 +76,13 @@ When enabled, every successfully completed run requests another turn at
 `agent_before_settle`, up to the continuation limit. No `workloop_report` tool or
 model completion classification is required. Errors and aborts disable the loop.
 
-**Completion and clarification do not automatically stop the loop.** It may repeat
-completion messages or questions until the limit is reached. Use `/workloop off`
-when the goal is complete or user input is required. Start with a small limit.
-Instructions constrain work to the approved overall goal, but are not a mechanical
-safety gate; Workloop never grants new permissions or commit/deployment authority.
+When the goal is complete or user input is required, the injected instruction asks
+the model to end its response with `[[WORKLOOP_STOP]]`. Workloop detects that
+marker, disables itself, and does not request another continuation. If the model
+omits the marker, the loop can still continue until the limit is reached; use
+`/workloop off` as the manual stop. Start with a small limit. Instructions
+constrain work to the approved overall goal, but are not a mechanical safety gate;
+Workloop never grants new permissions or commit/deployment authority.
 
 ## Local testing
 
@@ -93,8 +95,9 @@ node --experimental-strip-types --test packages/workloop/test/workloop.test.mjs
 ```
 
 The automated tests mock Pi's event handlers and cover report-free continuation,
-initially non-runnable context, entry preservation, limits, errors/aborts, stopping,
-session reset, and instance isolation. They do not verify actual terminal rendering.
+initially non-runnable context, entry preservation, stop-marker detection, limits,
+errors/aborts, stopping, session reset, and instance isolation. They do not verify
+actual terminal rendering.
 
 ### Interactive smoke test
 

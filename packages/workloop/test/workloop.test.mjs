@@ -45,6 +45,15 @@ test('continues without reports and supplies runnable context, preserving other 
   assert.equal(loop.statuses.at(-1), '↻ Workloop 1/2');
 });
 
+test('stop marker disables the loop without requesting another continuation', async () => {
+  const loop = setup();
+  await loop.on();
+  const result = loop.settle('completed', [{ type: 'assistant', content: 'Need input. [[WORKLOOP_STOP]]' }]);
+  assert.equal(result, undefined);
+  assert.equal(loop.settle(), undefined);
+  assert.equal(loop.statuses.at(-1), 'Workloop off');
+});
+
 test('continuations stop at the limit and can be explicitly restarted', async () => {
   const loop = setup();
   await loop.on(2);

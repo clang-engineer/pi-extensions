@@ -5,7 +5,18 @@ export default function (pi: ExtensionAPI) {
   let continuationCount = 0;
   let maxContinuations = 10;
 
-  const instructions = "Workloop is on. Continue with the next safe, small, verifiable step toward the user's approved overall goal, not just the last completed increment. Do not invent work outside that scope. Do not proceed through unclear product intent, architecture decisions, risky changes, unexplained failures, credentials, permissions, or deployment decisions; ask the user instead. Prefer verify → commit → continue only when commits are authorized. If the approved goal is complete, say so without inventing more work.";
+  const stopMarker = "[[WORKLOOP_STOP]]";
+  const instructions = `Workloop is on. Continue with the next safe, small, verifiable step toward the user's approved overall goal, not just the last completed increment. Do not invent work outside that scope. Do not proceed through unclear product intent, architecture decisions, risky changes, unexplained failures, credentials, permissions, or deployment decisions; ask the user instead. Prefer verify → commit → continue only when commits are authorized. If the approved goal is complete or the next step requires user input, include ${stopMarker} at the end of the response.`;
+
+  function entryContent(entry: unknown): string {
+    if (!entry || typeof entry !== "object" || !("content" in entry)) return "";
+    const content = entry.content;
+    return typeof content === "string" ? content : "";
+  }
+
+  function hasStopMarker(entries: unknown[]): boolean {
+    return entries.some((entry) => entryContent(entry).includes(stopMarker));
+  }
 
   function updateStatus(ctx: ExtensionContext) {
     const theme = ctx.ui.theme;
@@ -63,6 +74,11 @@ export default function (pi: ExtensionAPI) {
   pi.on("agent_before_settle", (event, ctx) => {
     if (!enabled) return;
     if (event.outcome !== "completed") {
+      enabled = false;
+      updateStatus(ctx);
+      return;
+    }
+    if (hasStopMarker(event.entries)) {
       enabled = false;
       updateStatus(ctx);
       return;
