@@ -4,14 +4,22 @@ export default function (pi: ExtensionAPI) {
   let enabled = false;
   let continuationCount = 0;
   let maxContinuations = 10;
+  let stopRequested = false;
 
   const stopMarker = "[[WORKLOOP_STOP]]";
   const instructions = `Workloop is on. Continue with the next safe, small, verifiable step toward the user's approved overall goal, not just the last completed increment. Do not invent work outside that scope. Do not proceed through unclear product intent, architecture decisions, risky changes, unexplained failures, credentials, permissions, or deployment decisions; ask the user instead. Prefer verify → commit → continue only when commits are authorized. If the approved goal is complete or the next step requires user input, include ${stopMarker} at the end of the response.`;
 
+  function contentText(content: unknown): string {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content
+      .map((part) => part && typeof part === "object" && "type" in part && part.type === "text" && "text" in part && typeof part.text === "string" ? part.text : "")
+      .join("");
+  }
+
   function entryContent(entry: unknown): string {
     if (!entry || typeof entry !== "object" || !("content" in entry)) return "";
-    const content = entry.content;
-    return typeof content === "string" ? content : "";
+    return contentText(entry.content);
   }
 
   function hasStopMarker(entries: unknown[]): boolean {
@@ -28,7 +36,15 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     enabled = false;
     continuationCount = 0;
+    stopRequested = false;
     updateStatus(ctx);
+  });
+
+  pi.on("message_end", (event) => {
+    if (!enabled) return;
+    if (event.message.role === "assistant" && contentText(event.message.content).includes(stopMarker)) {
+      stopRequested = true;
+    }
   });
 
   pi.on("before_agent_start", () => {
@@ -51,6 +67,7 @@ export default function (pi: ExtensionAPI) {
         maxContinuations = limit;
         enabled = true;
         continuationCount = 0;
+        stopRequested = false;
         updateStatus(ctx);
         ctx.ui.notify(`Workloop enabled (${continuationCount}/${maxContinuations})`, "info");
         return;
@@ -78,8 +95,9 @@ export default function (pi: ExtensionAPI) {
       updateStatus(ctx);
       return;
     }
-    if (hasStopMarker(event.entries)) {
+    if (stopRequested || hasStopMarker(event.entries)) {
       enabled = false;
+      stopRequested = false;
       updateStatus(ctx);
       return;
     }
@@ -103,7 +121,7 @@ export default function (pi: ExtensionAPI) {
       entries: [...event.entries, {
         type: "custom_message",
         customType: "workloop",
-        display: true,
+        display: false,
         content: instructions,
       }],
       continue: true,

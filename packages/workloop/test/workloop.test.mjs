@@ -20,6 +20,7 @@ function setup({ idle = true, onAbort = () => {} } = {}) {
     start: () => handlers.session_start({}, ctx),
     off: () => command.handler('off', ctx),
     on: (limit = 2) => command.handler(`on ${limit}`, ctx),
+    messageEnd: (message) => handlers.message_end({ message }, ctx),
     settle: (outcome = 'completed', entries = []) => handlers.agent_before_settle({ entries, outcome, context: { canContinue: false } }, ctx),
   };
 }
@@ -41,14 +42,25 @@ test('continues without reports and supplies runnable context, preserving other 
   assert.equal(result.continue, true);
   assert.equal(result.entries[0], existing);
   assert.equal(result.entries[1].type, 'custom_message');
+  assert.equal(result.entries[1].display, false);
   assert.match(result.entries[1].content, /approved overall goal/);
   assert.equal(loop.statuses.at(-1), '↻ Workloop 1/2');
 });
 
-test('stop marker disables the loop without requesting another continuation', async () => {
+test('stop marker in assistant message disables the loop without requesting another continuation', async () => {
   const loop = setup();
   await loop.on();
-  const result = loop.settle('completed', [{ type: 'assistant', content: 'Need input. [[WORKLOOP_STOP]]' }]);
+  loop.messageEnd({ role: 'assistant', content: [{ type: 'text', text: 'Need input. [[WORKLOOP_STOP]]' }] });
+  const result = loop.settle('completed', []);
+  assert.equal(result, undefined);
+  assert.equal(loop.settle(), undefined);
+  assert.equal(loop.statuses.at(-1), 'Workloop off');
+});
+
+test('stop marker in proposed entries disables the loop without requesting another continuation', async () => {
+  const loop = setup();
+  await loop.on();
+  const result = loop.settle('completed', [{ type: 'custom_message', customType: 'other', display: false, content: [{ type: 'text', text: 'Need input. [[WORKLOOP_STOP]]' }] }]);
   assert.equal(result, undefined);
   assert.equal(loop.settle(), undefined);
   assert.equal(loop.statuses.at(-1), 'Workloop off');
