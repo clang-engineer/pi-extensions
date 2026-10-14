@@ -9,21 +9,19 @@ export default function (pi: ExtensionAPI) {
   const stopMarker = "[[WORKLOOP_STOP]]";
   const instructions = `Workloop is on. Continue with the next safe, small, verifiable step toward the user's approved overall goal, not just the last completed increment. Do not invent work outside that scope. Do not proceed through unclear product intent, architecture decisions, risky changes, unexplained failures, credentials, permissions, or deployment decisions; ask the user instead. Prefer verify → commit → continue only when commits are authorized. If the approved goal is complete or the next step requires user input, include ${stopMarker} at the end of the response.`;
 
-  function contentText(content: unknown): string {
-    if (typeof content === "string") return content;
-    if (!Array.isArray(content)) return "";
-    return content
-      .map((part) => part && typeof part === "object" && "type" in part && part.type === "text" && "text" in part && typeof part.text === "string" ? part.text : "")
-      .join("");
+  function textFrom(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (Array.isArray(value)) return value.map(textFrom).filter(Boolean).join("\n");
+    if (!value || typeof value !== "object") return "";
+    const record = value as Record<string, unknown>;
+    return ["content", "text", "message", "response", "markdown"]
+      .map((key) => textFrom(record[key]))
+      .filter(Boolean)
+      .join("\n");
   }
 
-  function entryContent(entry: unknown): string {
-    if (!entry || typeof entry !== "object" || !("content" in entry)) return "";
-    return contentText(entry.content);
-  }
-
-  function hasStopMarker(entries: unknown[]): boolean {
-    return entries.some((entry) => entryContent(entry).includes(stopMarker));
+  function hasStopMarker(value: unknown): boolean {
+    return textFrom(value).includes(stopMarker);
   }
 
   function updateStatus(ctx: ExtensionContext) {
@@ -42,7 +40,7 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("message_end", (event) => {
     if (!enabled) return;
-    if (event.message.role === "assistant" && contentText(event.message.content).includes(stopMarker)) {
+    if (event.message.role === "assistant" && hasStopMarker(event.message)) {
       stopRequested = true;
     }
   });
