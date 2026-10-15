@@ -78,8 +78,9 @@ model completion classification is required. Errors and aborts disable the loop.
 
 When the goal is complete or user input is required, the injected instruction asks
 the model to end its response with `[[WORKLOOP_STOP]]`. Workloop detects that
-marker, disables itself, and does not request another continuation. If the model
-omits the marker, the loop can still continue until the limit is reached; use
+marker in the assistant message or the final projected reply, disables itself, and
+does not request another continuation. If the model omits the marker, the loop
+can still continue until the limit is reached; use
 `/workloop off` as the manual stop. Start with a small limit. Instructions
 constrain work to the approved overall goal, but are not a mechanical safety gate;
 Workloop never grants new permissions or commit/deployment authority.
@@ -113,8 +114,9 @@ If an installed copy also registers `/workloop`, disable that copy before testin
 2. Send: “This is a Workloop smoke test. Do not use tools or change files. Reply with one short sentence on each turn.”
 3. Expect the initial response plus two automatic continuations, without any report tool calls.
 4. Expect the continuation-limit message and an off footer after the second continuation.
-5. Run `/workloop status`, then `/workloop off`. The footer should show `Workloop off`.
-6. Enable Workloop again, start a harmless long response, and submit `/workloop off` while it is streaming. Expect cancellation of the active response and no Workloop continuation. Repeat `/workloop off` while idle; it should remain safely off.
+5. Re-enable `/workloop on 2` and send: “This task is already complete. Reply with `Done. [[WORKLOOP_STOP]]`.” Expect one reply, no automatic continuation, and `Workloop off`.
+6. Run `/workloop status`, then `/workloop off`. The footer should show `Workloop off`.
+7. Enable Workloop again, start a harmless long response, and submit `/workloop off` while it is streaming. Expect cancellation of the active response and no Workloop continuation. Repeat `/workloop off` while idle; it should remain safely off.
 
 The count measures automatic continuations, not tool calls or completed tasks.
 A completed task or a question can still trigger another turn; stop manually when needed.

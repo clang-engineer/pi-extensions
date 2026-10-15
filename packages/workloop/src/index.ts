@@ -93,7 +93,12 @@ export default function (pi: ExtensionAPI) {
       updateStatus(ctx);
       return;
     }
-    if (stopRequested || hasStopMarker(event.entries)) {
+    // Check the final projected conversation too: message_end may not observe the
+    // final rendered assistant response in every Pi/model integration. Only inspect
+    // the most recent assistant message, never injected Workloop instructions.
+    const lastReply = [...event.context.contextMessages].reverse()
+      .find((message) => message.role === "assistant" || message.role === "user");
+    if (stopRequested || (lastReply?.role === "assistant" && hasStopMarker(lastReply)) || hasStopMarker(event.entries)) {
       enabled = false;
       stopRequested = false;
       updateStatus(ctx);

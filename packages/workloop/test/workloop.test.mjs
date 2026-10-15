@@ -21,7 +21,7 @@ function setup({ idle = true, onAbort = () => {} } = {}) {
     off: () => command.handler('off', ctx),
     on: (limit = 2) => command.handler(`on ${limit}`, ctx),
     messageEnd: (message) => handlers.message_end({ message }, ctx),
-    settle: (outcome = 'completed', entries = []) => handlers.agent_before_settle({ entries, outcome, context: { canContinue: false } }, ctx),
+    settle: (outcome = 'completed', entries = [], contextMessages = []) => handlers.agent_before_settle({ entries, outcome, context: { canContinue: false, contextMessages } }, ctx),
   };
 }
 
@@ -64,6 +64,28 @@ test('stop marker in proposed entries disables the loop without requesting anoth
   assert.equal(result, undefined);
   assert.equal(loop.settle(), undefined);
   assert.equal(loop.statuses.at(-1), 'Workloop off');
+});
+
+test('stop marker in final projected assistant reply stops even without message_end', async () => {
+  const loop = setup();
+  await loop.on();
+  const result = loop.settle('completed', [], [
+    { role: 'custom', content: 'Workloop instructions include [[WORKLOOP_STOP]]' },
+    { role: 'assistant', content: [{ type: 'text', text: 'Done. [[WORKLOOP_STOP]]' }] },
+  ]);
+  assert.equal(result, undefined);
+  assert.equal(loop.statuses.at(-1), 'Workloop off');
+});
+
+test('old stop markers do not stop a fresh reply', async () => {
+  const loop = setup();
+  await loop.on();
+  const messages = [
+    { role: 'assistant', content: [{ type: 'text', text: 'Done. [[WORKLOOP_STOP]]' }] },
+    { role: 'user', content: [{ type: 'text', text: 'New task' }] },
+  ];
+  const result = loop.settle('completed', [], messages);
+  assert.equal(result.continue, true);
 });
 
 test('continuations stop at the limit and can be explicitly restarted', async () => {
