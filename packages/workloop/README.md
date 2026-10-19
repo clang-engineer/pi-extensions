@@ -70,6 +70,10 @@ Then run `/reload` in Pi or restart Pi, and enable `/workloop on` again.
 /workloop off         # disable automatic continuation and abort the active operation
 ```
 
+Enabling `/workloop on` authorizes local Git commits within the approved task scope, unless user or repository instructions prohibit commits or require review first. For each coherent work unit, the agent is instructed to review the diff, run relevant checks, commit only that unit's changes, and continue without routine approval prompts. A completed increment is a checkpoint, not a reason to stop. If commits are prohibited, safe approved work can still continue without committing.
+
+The agent must inspect both working-tree and staged changes, preserve unrelated or pre-existing work, and avoid blanket staging. Amending commits, rewriting history, pushing, and deployment require separate explicit authorization. If changes cannot be safely isolated, the agent should stop and ask.
+
 `/workloop off` disables automatic continuation before requesting cancellation of any active agent operation. Cancellation does not roll back file edits, commits, or external side effects; tools must honor cancellation for prompt termination.
 
 When enabled, every successfully completed run requests another turn at
@@ -83,7 +87,7 @@ does not request another continuation. If the model omits the marker, the loop
 can still continue until the limit is reached; use
 `/workloop off` as the manual stop. Start with a small limit. Instructions
 constrain work to the approved overall goal, but are not a mechanical safety gate;
-Workloop never grants new permissions or commit/deployment authority.
+Workloop provides scoped local-commit authorization as described above, not permission to expand the task, bypass repository instructions, push, or deploy.
 
 ## Local testing
 
@@ -96,7 +100,7 @@ node --experimental-strip-types --test packages/workloop/test/workloop.test.mjs
 ```
 
 The automated tests mock Pi's event handlers and cover report-free continuation,
-initially non-runnable context, entry preservation, stop-marker detection, limits,
+initially non-runnable context, entry preservation, scoped commit instructions, stop-marker detection, limits,
 errors/aborts, stopping, session reset, and instance isolation. They do not verify
 actual terminal rendering.
 

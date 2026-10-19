@@ -20,6 +20,7 @@ function setup({ idle = true, onAbort = () => {} } = {}) {
     start: () => handlers.session_start({}, ctx),
     off: () => command.handler('off', ctx),
     on: (limit = 2) => command.handler(`on ${limit}`, ctx),
+    beforeStart: () => handlers.before_agent_start({}, ctx),
     messageEnd: (message) => handlers.message_end({ message }, ctx),
     settle: (outcome = 'completed', entries = [], contextMessages = []) => handlers.agent_before_settle({ entries, outcome, context: { canContinue: false, contextMessages } }, ctx),
   };
@@ -45,6 +46,24 @@ test('continues without reports and supplies runnable context, preserving other 
   assert.equal(result.entries[1].display, false);
   assert.match(result.entries[1].content, /approved overall goal/);
   assert.equal(loop.statuses.at(-1), '↻ Workloop 1/2');
+});
+
+test('initial and continuation instructions authorize scoped commits without routine approval', async () => {
+  const loop = setup();
+  assert.equal(loop.beforeStart(), undefined);
+  await loop.on();
+  const initial = loop.beforeStart().message;
+  const continuation = loop.settle().entries[0];
+  assert.equal(initial.display, false);
+  assert.equal(initial.content, continuation.content);
+  assert.match(initial.content, /authorizes local Git commits/);
+  assert.match(initial.content, /unless the user or repository instructions prohibit commits or require review first/);
+  assert.match(initial.content, /review the diff, run relevant checks, commit only that unit's changes/);
+  assert.match(initial.content, /without asking for routine review or commit approval/);
+  assert.match(initial.content, /preserve unrelated or pre-existing changes/);
+  assert.match(initial.content, /Do not use blanket staging, amend existing commits, rewrite history, push, or deploy/);
+  assert.match(initial.content, /lack of commit authorization alone is not a reason to stop/);
+  assert.match(initial.content, /A completed increment is a checkpoint/);
 });
 
 test('stop marker in assistant message disables the loop without requesting another continuation', async () => {

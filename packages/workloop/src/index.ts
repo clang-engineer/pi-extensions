@@ -7,7 +7,7 @@ export default function (pi: ExtensionAPI) {
   let stopRequested = false;
 
   const stopMarker = "[[WORKLOOP_STOP]]";
-  const instructions = `Workloop is on. Continue with the next safe, small, verifiable step toward the user's approved overall goal, not just the last completed increment. Do not invent work outside that scope. Do not proceed through unclear product intent, architecture decisions, risky changes, unexplained failures, credentials, permissions, or deployment decisions; ask the user instead. Prefer verify → commit → continue only when commits are authorized. If the approved goal is complete or the next step requires user input, include ${stopMarker} at the end of the response.`;
+  const instructions = `Workloop is on. Continue with the next safe, small, verifiable step toward the user's approved overall goal, not just the last completed increment. Do not invent work outside that scope. Enabling Workloop authorizes local Git commits for completed work units within that scope, unless the user or repository instructions prohibit commits or require review first. For each coherent work unit: review the diff, run relevant checks, commit only that unit's changes, then continue to the next step without asking for routine review or commit approval. Inspect the working tree and staged changes before committing; preserve unrelated or pre-existing changes and never include them in your commit. Do not use blanket staging, amend existing commits, rewrite history, push, or deploy without separate explicit authorization. If commits are prohibited, continue safe approved work without committing; lack of commit authorization alone is not a reason to stop. Stop and ask only for genuine blockers such as unclear product intent, architecture decisions, risky changes, unexplained failures, credentials, permissions, or changes that cannot be safely isolated. A completed increment is a checkpoint, not completion of the overall goal. If the approved overall goal is complete or no safe next step exists without user input, include ${stopMarker} at the end of the response.`;
 
   function textFrom(value: unknown): string {
     if (typeof value === "string") return value;
@@ -52,7 +52,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("workloop", {
-    description: "Toggle bounded automatic continuation for unattended work",
+    description: "Toggle bounded work with per-unit review, verification, and local commits",
     handler: async (arg, ctx) => {
       const command = arg.trim().toLowerCase();
       if (command === "on" || command.startsWith("on ")) {
