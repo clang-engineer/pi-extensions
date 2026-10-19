@@ -1,6 +1,6 @@
 {
   "name": "@clang.engineer/pi-workloop",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Bounded automatic continuation for Pi coding agent",
   "license": "MIT",
   "type": "module",
